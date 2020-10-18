@@ -105,8 +105,8 @@ Inst_Info EXEQ_remove(EXEQ *t){
   for(ii=0; ii<MAX_EXEQ_ENTRIES; ii++){
     if(t->EXEQ_Entries[ii].valid){
       if(t->EXEQ_Entries[ii].inst.exe_wait_cycles==0){
-	t->EXEQ_Entries[ii].valid=false;
-	return t->EXEQ_Entries[ii].inst;
+	        t->EXEQ_Entries[ii].valid=false;
+	        return t->EXEQ_Entries[ii].inst;
       }
     }
   }

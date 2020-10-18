@@ -280,6 +280,31 @@ void pipe_cycle_issue(Pipeline *p) {
   // TODO: If src1/src is remapped, set src1tag/src2tag from RAT. Set src1ready/src2ready based on ready bit from ROB entries.
   // TODO: Set dr_tag
 
+    for(ii=0; ii<PIPE_WIDTH; ii++){
+        Inst_Info inst = p->ID_latch[ii].inst;
+        int PRF_id = ROB_insert(p->pipe_ROB, inst) != -1
+        if(PRF_id_insert != -1) {        // no space
+            // src1 -> is it remapped? if not -> get from RAT
+            int tag1 = RAT_get_remap(p->pipe_RAT, inst.src1_reg)
+            if(tag1 == -1) {
+                inst.src1_ready = true;
+            } else { // it is remapped
+                inst.src1_tag = tag1;
+                inst.src1_ready = ROB_check_ready(p->pipe_ROB, tag1);
+            }
+            // src2 -> is it remapped? if not -> get from RAT
+            int tag2 = RAT_get_remap(p->pipe_ROB, inst.src1_reg)
+            if(RAT_get_remap(p->pipe_RAT, inst->src2_reg) == -1) {
+                inst.src2_ready = true;
+            } else {
+                inst.src2_tag = tag2;
+                inst.src2_ready = ROB_check_ready(p->pipe_ROB, tag2);
+            }
+            // Set desintation remapping --
+            RAT_set_remap(p->pipe_RAT, inst.dr_tag, PRF_id);
+        }
+    }
+
 }
 
 //--------------------------------------------------------------------//
@@ -290,23 +315,23 @@ void pipe_cycle_schedule(Pipeline *p) {
   // every cycle up to PIPEWIDTH instructions scheduled
 
   // TODO: Implement two scheduling policies (SCHED_POLICY: 0 and 1)
+  for(int ii = 0; ii < PIPE_WIDTH; ii++) {
+      if(SCHED_POLICY==0){
+        // inorder scheduling
+        // Find all valid entries, if oldest is stalled then stop
+        // Else mark it as ready to execute and send to SC_latch
 
-  if(SCHED_POLICY==0){
-    // inorder scheduling
-    // Find all valid entries, if oldest is stalled then stop
-    // Else mark it as ready to execute and send to SC_latch
+
+      }
+
+      if(SCHED_POLICY==1){
+        // out of order scheduling
+        // Find valid + src1ready + src2ready + !exec entries in ROB
+        // Mark ROB entry as ready to execute  and transfer instruction to SC_latch
 
 
+      }
   }
-
-  if(SCHED_POLICY==1){
-    // out of order scheduling
-    // Find valid + src1ready + src2ready + !exec entries in ROB
-    // Mark ROB entry as ready to execute  and transfer instruction to SC_latch
-
-
-  }
-
 }
 
 
@@ -322,7 +347,6 @@ void pipe_cycle_writeback(Pipeline *p){
 
 
 //--------------------------------------------------------------------//
-
 
 void pipe_cycle_commit(Pipeline *p) {
   int ii = 0;
@@ -350,7 +374,3 @@ void pipe_cycle_commit(Pipeline *p) {
 }
 
 //--------------------------------------------------------------------//
-
-
-
-

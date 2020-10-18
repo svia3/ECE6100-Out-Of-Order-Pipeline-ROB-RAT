@@ -1,4 +1,4 @@
-/********************************************************************  
+/********************************************************************
  * File         : sim.cpp
  * Description  :  Out of Order Pipeline for Lab3 ECE 6100
  *********************************************************************/
@@ -57,37 +57,37 @@ int main(int argc, char *argv[])
     FILE *tr_file;
     char tr_filename[1024];
     char cmd_string[256];
-    
+
     if(argc < 1) {
-        die_message("Must Provide a Trace File"); 
+        die_message("Must Provide a Trace File");
     }
 
     //--------------------------------------------------------------------
-    // -- Get params from command line 
-    //--------------------------------------------------------------------    
+    // -- Get params from command line
+    //--------------------------------------------------------------------
     for ( ii = 1; ii < argc; ii++) {
-	if (argv[ii][0] == '-') {	    
+	if (argv[ii][0] == '-') {
 	    if (!strcmp(argv[ii], "-h") || !strcmp(argv[ii], "-help")) {
 		die_usage();
-	    }	    
+	    }
 
 
 	    else if (!strcmp(argv[ii], "-pipewidth")) {
-		if (ii < argc - 1) {		  
+		if (ii < argc - 1) {
 		    PIPE_WIDTH = atoi(argv[ii+1]);
 		    ii += 1;
 		}
 	    }
 
 	      else if (!strcmp(argv[ii], "-schedpolicy")) {
-		if (ii < argc - 1) {		  
+		if (ii < argc - 1) {
 		    SCHED_POLICY = atoi(argv[ii+1]);
 		    ii += 1;
 		}
 	    }
 
 	      else if (!strcmp(argv[ii], "-loadlatency")) {
-		if (ii < argc - 1) {		  
+		if (ii < argc - 1) {
 		    LOAD_EXE_CYCLES = atoi(argv[ii+1]);
 		    ii += 1;
 		}
@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
 	}
     }
 
-    
+
   // ------- Open Trace File -------------------------------------------
     sprintf(cmd_string,"gunzip -c %s", tr_filename);
     if ((tr_file = popen(cmd_string, "r")) == NULL){
@@ -109,13 +109,13 @@ int main(int argc, char *argv[])
     } else {
         printf("Opened file with command: %s \n", cmd_string);
     }
-     
+
   // ------- Pipeline Initialization & Execution ----------------------
 
-     pipeline = pipe_init(tr_file); 
+     pipeline = pipe_init(tr_file);
 
      printf("\n%48s", "");
-     
+
     while(!pipeline->halt) {
       pipe_cycle(pipeline);
       check_heartbeat();
@@ -128,9 +128,9 @@ int main(int argc, char *argv[])
 }
 
 /*********************************************************************
- * Print Statistics 
+ * Print Statistics
  *********************************************************************/
-  
+
 void print_stats(void) {
     char header[256];
     sprintf(header, "LAB3");
@@ -139,7 +139,7 @@ void print_stats(void) {
     double cpi = (double)(stat_num_cycle)/(double)(stat_num_inst);
 
     printf("\n\n");
-  
+
     printf("\n%s_NUM_INST           \t : %10u" , header, (uint32_t)stat_num_inst)  ;
     printf("\n%s_NUM_CYCLES         \t : %10u" , header, (uint32_t)stat_num_cycle);
     printf("\n%s_CPI                \t : %10.3f" , header, cpi);
@@ -148,7 +148,7 @@ void print_stats(void) {
 }
 
 /*********************************************************************
- * Print Heartbeat 
+ * Print Heartbeat
  *********************************************************************/
 uint64_t last_hbeat_cycle;
 uint64_t last_hbeat_line;

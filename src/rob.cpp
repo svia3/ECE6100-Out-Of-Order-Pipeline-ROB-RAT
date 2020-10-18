@@ -4,7 +4,7 @@
 #include "rob.h"
 
 
-int32_t NUM_ROB_ENTRIES;
+extern int32_t NUM_ROB_ENTRIES;
 
 /////////////////////////////////////////////////////////////
 // Init function initializes the ROB
