@@ -115,8 +115,8 @@ void  ROB_wakeup(ROB *t, int tag){
     // }
     // -- CDB broadcast that is waiting for that tag value to be produced --
     // int curr = t.head_ptr;
-    for(int rob_idx = t.head_ptr; rob_idx != t.tail_ptr; rob_idx++) {
-        Inst_Info curr = t->ROB_Entries[rob_idx].inst;
+    for(int i = t.head_ptr; i != t.tail_ptr; i++) {
+        Inst_Info curr = t->ROB_Entries[i].inst;
         if(tag == curr.src1_tag) {
             curr.src1_ready = true;
         }
