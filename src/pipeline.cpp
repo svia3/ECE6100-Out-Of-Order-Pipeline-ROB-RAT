@@ -287,7 +287,7 @@ void pipe_cycle_issue(Pipeline *p) {
             // src1 -> is it remapped? if not -> get from RAT
             int tag1 = RAT_get_remap(p->pipe_RAT, inst.src1_reg)
             if(tag1 == -1) {
-                inst.src1_ready = true;
+                inst.src1_ready = true; // why???
             } else { // it is remapped
                 inst.src1_tag = tag1;
                 inst.src1_ready = p->pipe_ROB[tag1].src1_ready;
@@ -345,7 +345,7 @@ void pipe_cycle_writeback(Pipeline *p){
     for(int ii = 0; ii < MAX_WRITEBACKS; ii++) {
         Inst_Info inst = p->EX_latch[ii].inst;
         ROB_wakeup(p->pipe_ROB, inst.dr_tag); // wake up src ready bits in instruction
-        ROB_mark_ready(p->pipe_ROB, inst); // mark ready bit in ROB
+        ROB_mark_ready(p->pipe_ROB, inst); // mark ready bit in ROB -> check srcs
     }
 
 }
@@ -354,25 +354,29 @@ void pipe_cycle_writeback(Pipeline *p){
 //--------------------------------------------------------------------//
 
 void pipe_cycle_commit(Pipeline *p) {
-  int ii = 0;
+    int ii = 0;
 
   // TODO: check the head of the ROB. If ready commit (update stats)
   // TODO: Deallocate entry from ROB
   // TODO: Update RAT after checking if the mapping is still relevant
+  if (ROB_check_head(p->pipe_ROB)) {
+       // update stats
+  }
+  ROB_remove_head(p->pipe_ROB)  // deallocate
 
 
 
   // DUMMY CODE (for compiling, and ensuring simulation terminates!)
-  for(ii=0; ii<PIPE_WIDTH; ii++){
-    if(p->FE_latch[ii].valid){
-      if(p->FE_latch[ii].inst.inst_num >= p->halt_inst_num){
-        p->halt=true;
-      }else{
-	p->stat_retired_inst++;
-	p->FE_latch[ii].valid=false;
-      }
+    for(ii=0; ii<PIPE_WIDTH; ii++){
+        if(p->FE_latch[ii].valid){
+            if(p->FE_latch[ii].inst.inst_num >= p->halt_inst_num){
+              p->halt=true;
+            } else {
+                p->stat_retired_inst++;
+                p->FE_latch[ii].valid=false;
+            }
+        }
     }
-  }
 }
 
 //--------------------------------------------------------------------//
