@@ -46,7 +46,7 @@ void ROB_print_state(ROB *t){
 bool ROB_check_space(ROB *t){
     // return (t->tail_ptr != t->head_ptr) && t->ROB_Entries[head_ptr]
     return !(t->ROB_Entries[t->tail_ptr].valid);
-    // if the tail doesn't have something in it, return true
+    // if the tail is valid -> something in it -> no space
 }
 
 /////////////////////////////////////////////////////////////
@@ -114,7 +114,7 @@ void  ROB_wakeup(ROB *t, int tag){
     // }
     // -- CDB broadcast that is waiting for that tag value to be produced --
     int curr = t.head_ptr;
-    while(t.head_ptr != t.tail_ptr) {   // search for dest = src_1 / 2
+    while(curr != t.tail_ptr) {   // search for dest = src_1 / 2
         if(tag == src1_tag) {
             t->ROB_Entries[curr].inst.src1_ready = true;
         }
