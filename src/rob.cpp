@@ -56,8 +56,11 @@ bool ROB_check_space(ROB *t){
 int ROB_insert(ROB *t, Inst_Info inst){
     int PRF_id = -1;
     if (ROB_check_space(t)) {
+        // build the entry --
         t->ROB_Entries[t->tail_ptr].inst = inst;            // insert at the tail
         t->ROB_Entries[t->tail_ptr].valid = true;           // used spot -> mark valid
+        t->ROB_Entries[t->tail_ptr].exec = false;           // execute?
+        t->ROB_Entries[t->tail_ptr].ready = false;          // ready?
         PRF_id = t->tail_ptr;                               // return index
         t->tail_ptr = (t->tail_ptr + 1) % NUM_ROB_ENTRIES;  // wrap around
     }
@@ -105,9 +108,20 @@ bool ROB_check_head(ROB *t){
 /////////////////////////////////////////////////////////////
 
 void  ROB_wakeup(ROB *t, int tag){
-    if(t->ROB_Entries[tag].ready && t->ROB_Entries[tag].valid) {
-        t->ROB_Entries[tag].inst.src1_ready = true;
-        t->ROB_Entries[tag].inst.src2_ready = true;
+    // if(t->ROB_Entries[tag].ready && t->ROB_Entries[tag].valid) {
+    //     t->ROB_Entries[tag].inst.src1_ready = true;
+    //     t->ROB_Entries[tag].inst.src2_ready = true;
+    // }
+    // -- CDB broadcast that is waiting for that tag value to be produced --
+    int curr = t.head_ptr;
+    while(t.head_ptr != t.tail_ptr) {   // search for dest = src_1 / 2
+        if(tag == src1_tag) {
+            t->ROB_Entries[curr].inst.src1_ready = true;
+        }
+        if(tag == src2_tag) {
+            t->ROB_Entries[curr].inst.src2_ready = true;
+        }
+        curr++; // next element
     }
 }
 

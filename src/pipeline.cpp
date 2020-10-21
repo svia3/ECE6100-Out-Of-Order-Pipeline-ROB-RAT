@@ -290,15 +290,15 @@ void pipe_cycle_issue(Pipeline *p) {
                 inst.src1_ready = true;
             } else { // it is remapped
                 inst.src1_tag = tag1;
-                inst.src1_ready = ROB_check_ready(p->pipe_ROB, tag1);
+                inst.src1_ready = p->pipe_ROB[tag1].src1_ready;
             }
             // src2 -> is it remapped? if not -> get from RAT
-            int tag2 = RAT_get_remap(p->pipe_ROB, inst.src1_reg)
-            if(RAT_get_remap(p->pipe_RAT, inst->src2_reg) == -1) {
+            int tag2 = RAT_get_remap(p->pipe_ROB, inst.src2_reg)
+            if(tag2 == -1) {
                 inst.src2_ready = true;
             } else {
                 inst.src2_tag = tag2;
-                inst.src2_ready = ROB_check_ready(p->pipe_ROB, tag2);
+                inst.src2_ready = p->pipe_ROB[tag2].src2_ready;
             }
             // Set desintation remapping --
             RAT_set_remap(p->pipe_RAT, inst.dr_tag, PRF_id);
@@ -314,24 +314,23 @@ void pipe_cycle_schedule(Pipeline *p) {
   // select instruction(s) to Execute
   // every cycle up to PIPEWIDTH instructions scheduled
 
-  // TODO: Implement two scheduling policies (SCHED_POLICY: 0 and 1)
-  for(int ii = 0; ii < PIPE_WIDTH; ii++) {
-      if(SCHED_POLICY==0){
-        // inorder scheduling
-        // Find all valid entries, if oldest is stalled then stop
-        // Else mark it as ready to execute and send to SC_latch
+    // TODO: Implement two scheduling policies (SCHED_POLICY: 0 and 1)
+    if(SCHED_POLICY==0){
+    // inorder scheduling
+    // Find all valid entries, if oldest is stalled then stop
+    // Else mark it as ready to execute and send to SC_latch
 
 
-      }
+    }
 
-      if(SCHED_POLICY==1){
-        // out of order scheduling
-        // Find valid + src1ready + src2ready + !exec entries in ROB
-        // Mark ROB entry as ready to execute  and transfer instruction to SC_latch
+    if(SCHED_POLICY==1){
+    // out of order scheduling
+    // Find valid + src1ready + src2ready + !exec entries in ROB
+    // Mark ROB entry as ready to execute  and transfer instruction to SC_latch
 
 
-      }
-  }
+
+    }
 }
 
 
@@ -342,6 +341,12 @@ void pipe_cycle_writeback(Pipeline *p){
   // TODO: Go through all instructions out of EXE latch
   // TODO: Writeback to ROB (using wakeup function)
   // TODO: Update the ROB, mark ready, and update Inst Info in ROB
+
+    for(int ii = 0; ii < MAX_WRITEBACKS; ii++) {
+        Inst_Info inst = p->EX_latch[ii].inst;
+        ROB_wakeup(p->pipe_ROB, inst.dr_tag); // wake up src ready bits in instruction
+        ROB_mark_ready(p->pipe_ROB, inst); // mark ready bit in ROB
+    }
 
 }
 
@@ -354,9 +359,6 @@ void pipe_cycle_commit(Pipeline *p) {
   // TODO: check the head of the ROB. If ready commit (update stats)
   // TODO: Deallocate entry from ROB
   // TODO: Update RAT after checking if the mapping is still relevant
-
-
-
 
 
 
