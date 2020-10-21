@@ -82,9 +82,8 @@ void ROB_mark_exec(ROB *t, Inst_Info inst){
 /////////////////////////////////////////////////////////////
 
 void ROB_mark_ready(ROB *t, Inst_Info inst){
-    if(inst.src1_ready and inst.src2_ready) {
-        t->ROB_Entries[PRF_id].ready = true;    // read to wrtie back and commit ?
-    }
+    int PRF_id = inst.dr_tag;
+    t->ROB_Entries[PRF_id].ready = true;    // read to wrtie back and commit ?
 }
 
 /////////////////////////////////////////////////////////////
@@ -92,7 +91,7 @@ void ROB_mark_ready(ROB *t, Inst_Info inst){
 /////////////////////////////////////////////////////////////
 
 bool ROB_check_ready(ROB *t, int tag){
-    return t->ROB_Entries[tag].ready && t->ROB_Entries[tag].valid;
+    return t->ROB_Entries[tag].src1_ready && t->ROB_Entries[tag].src2_ready && t->ROB_Entries[tag].valid;
 }
 
 
@@ -115,7 +114,7 @@ void  ROB_wakeup(ROB *t, int tag){
     // }
     // -- CDB broadcast that is waiting for that tag value to be produced --
     // int curr = t.head_ptr;
-    for(int i = t.head_ptr; i != t.tail_ptr; i++) {
+    for(int i = t->head_ptr; i != t->tail_ptr; i++) {
         Inst_Info curr = t->ROB_Entries[i].inst;
         if(tag == curr.src1_tag) {
             curr.src1_ready = true;
