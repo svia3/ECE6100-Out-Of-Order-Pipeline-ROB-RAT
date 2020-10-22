@@ -286,7 +286,7 @@ void pipe_cycle_issue(Pipeline *p) {
         int old = INT_MAX, min_idx = ii;
         // loop for oldest inst_num -> smallest -> change ii to this index
         for(int jj = 0; jj < PIPE_WIDTH; jj++) {
-            if(p->ID_latch[jj].inst.inst_num < old) {
+            if(p->ID_latch[jj].inst.inst_num < old && p->ID_latch[jj].valid) {
                 old = p->ID_latch[jj].inst.inst_num;    // oldest inst num in latch
                 min_idx = jj;           // oldest idx in latch
             }
@@ -295,24 +295,24 @@ void pipe_cycle_issue(Pipeline *p) {
         Inst_Info insert = p->ID_latch[min_idx].inst;
         if (p->ID_latch[min_idx].valid) { // if valid ->
             int PRF_id = ROB_insert(p->pipe_ROB, insert);
-            if(PRF_id != -1) {        // no space
-                p->ID_latch[ii].valid = false;
-                p->ID_latch[ii].stall = false;
+            if(PRF_id != -1) {
+                p->ID_latch[min_idx].valid = false;
+                p->ID_latch[min_idx].stall = false;
                 // src1 -> is it remapped? if not -> get from RAT
-                int tag1 = RAT_get_remap(p->pipe_RAT, insert.src1_reg);
+                int tag1 = RAT_get_remap(p->pipe_RAT, p->pipe_ROB->ROB_Entries[PRF_id].inst.src1_reg);
                 if(tag1 == -1) {
-                    insert.src1_ready = true;
+                    p->pipe_ROB->ROB_Entries[PRF_id].inst.src1_ready = true;
                 } else { // it is remapped
-                    insert.src1_tag = tag1;
-                    insert.src1_ready = ROB_check_ready(p->pipe_ROB, tag1);
+                    p->pipe_ROB->ROB_Entries[PRF_id].inst.src1_tag = tag1;
+                    p->pipe_ROB->ROB_Entries[PRF_id].inst.src1_ready = ROB_check_ready(p->pipe_ROB, tag1);
                 }
                 // src2 -> is it remapped? if not -> get from RAT
-                int tag2 = RAT_get_remap(p->pipe_RAT, insert.src2_reg);
+                int tag2 = RAT_get_remap(p->pipe_RAT, p->pipe_ROB->ROB_Entries[PRF_id].inst.src2_reg);
                 if(tag2 == -1) {
-                    insert.src2_ready = true;
+                    p->pipe_ROB->ROB_Entries[PRF_id].inst.src2_ready = true;
                 } else {
-                    insert.src2_tag = tag2;
-                    insert.src1_ready = ROB_check_ready(p->pipe_ROB, tag2);
+                    p->pipe_ROB->ROB_Entries[PRF_id].inst.src2_tag = tag2;
+                    p->pipe_ROB->ROB_Entries[PRF_id].inst.src2_ready = ROB_check_ready(p->pipe_ROB, tag2);
                 }
                 // Set desintation remapping --
                 insert.dr_tag = PRF_id;

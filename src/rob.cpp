@@ -55,7 +55,6 @@ bool ROB_check_space(ROB *t){
 /////////////////////////////////////////////////////////////
 
 int ROB_insert(ROB *t, Inst_Info inst){
-    printf("HERE");
     int PRF_id = -1;
     if (ROB_check_space(t)) {
         // build the entry --
