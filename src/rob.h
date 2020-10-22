@@ -37,6 +37,7 @@ bool      ROB_check_ready(ROB *t, int tag);
 bool      ROB_check_head(ROB *t);
 void      ROB_wakeup(ROB *t, int tag);
 Inst_Info ROB_remove_head(ROB *t);
+int       ROB_get_size(ROB *t);
 
 /////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////

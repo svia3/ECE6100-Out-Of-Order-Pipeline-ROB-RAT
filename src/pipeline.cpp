@@ -280,29 +280,51 @@ void pipe_cycle_issue(Pipeline *p) {
   // TODO: If src1/src is remapped, set src1tag/src2tag from RAT. Set src1ready/src2ready based on ready bit from ROB entries.
   // TODO: Set dr_tag
 
-    for(ii=0; ii<PIPE_WIDTH; ii++){
-        Inst_Info inst = p->ID_latch[ii].inst;
-        int PRF_id = ROB_insert(p->pipe_ROB, inst) != -1
-        if(PRF_id_insert != -1) {        // no space
-            // src1 -> is it remapped? if not -> get from RAT
-            int tag1 = RAT_get_remap(p->pipe_RAT, inst.src1_reg)
-            if(tag1 == -1) {
-                inst.src1_ready = true; // why???
-            } else { // it is remapped
-                inst.src1_tag = tag1;
-                inst.src1_ready = p->pipe_ROB[tag1].src1_ready;
+    // stalls in full ROB -> oldest entry in ID latch -> issue
+    for(int ii=0; ii<PIPE_WIDTH; ii++){
+        // find min instruction here before you insert -> save index/instruction
+        int old = INT_MAX, min_idx = ii;
+        // loop for oldest inst_num -> smallest -> change ii to this index
+        for(int jj = 0; jj < PIPE_WIDTH; jj++) {
+            if(p->ID_latch[jj].inst.inst_num < old) {
+                old = p->ID_latch[jj].inst.inst_num;    // oldest inst num in latch
+                min_idx = jj;           // oldest idx in latch
             }
-            // src2 -> is it remapped? if not -> get from RAT
-            int tag2 = RAT_get_remap(p->pipe_ROB, inst.src2_reg)
-            if(tag2 == -1) {
-                inst.src2_ready = true;
+        }
+        // insert the oldest
+        Inst_Info insert = p->ID_latch[min_idx].inst;
+        if (p->ID_latch[min_idx].valid) { // if valid ->
+            int PRF_id = ROB_insert(p->pipe_ROB, insert);
+            if(PRF_id != -1) {        // no space
+                p->ID_latch[ii].valid = false;
+                p->ID_latch[ii].stall = false;
+                // src1 -> is it remapped? if not -> get from RAT
+                int tag1 = RAT_get_remap(p->pipe_RAT, insert.src1_reg);
+                if(tag1 == -1) {
+                    insert.src1_ready = true;
+                } else { // it is remapped
+                    insert.src1_tag = tag1;
+                    insert.src1_ready = ROB_check_ready(p->pipe_ROB, tag1);
+                }
+                // src2 -> is it remapped? if not -> get from RAT
+                int tag2 = RAT_get_remap(p->pipe_RAT, insert.src2_reg);
+                if(tag2 == -1) {
+                    insert.src2_ready = true;
+                } else {
+                    insert.src2_tag = tag2;
+                    insert.src1_ready = ROB_check_ready(p->pipe_ROB, tag2);
+                }
+                // Set desintation remapping --
+                insert.dr_tag = PRF_id;
+                // for STORES -> dest_reg -1
+                if (insert.dest_reg != -1) {
+                    RAT_set_remap(p->pipe_RAT, insert.dest_reg, PRF_id);
+                }
             } else {
-                inst.src2_tag = tag2;
-                inst.src2_ready = p->pipe_ROB[tag2].src2_ready;
+                // stall and valid for ID latch
+                p->ID_latch[min_idx].valid = true;
+                p->ID_latch[min_idx].stall = true;
             }
-            // Set desintation remapping --
-            inst.dr_tag = PRF_id;
-            RAT_set_remap(p->pipe_RAT, inst.dest_reg, PRF_id);
         }
     }
 
@@ -321,15 +343,28 @@ void pipe_cycle_schedule(Pipeline *p) {
     // Find all valid entries, if oldest is stalled then stop
     // Else mark it as ready to execute and send to SC_latch
         for(int ii = 0; ii < PIPE_WIDTH; ii++) {
-            for(int i = p->pipe_ROB->head_ptr; i != p->pipe_ROB->tail_ptr; i++) {
-                ROB_Entry rob_entry = p->pipe_ROB->ROB_Entries[i];
-                Inst_Info inst = rob_entry.inst;
-                if (ROB_check_ready(p->pipe_ROB, inst.dr_tag)) {   // unscheduled ??
-                    ROB_mark_ready(p->pipe_ROB, inst);
-                    p->SC_latch[ii].inst = inst;
-                } else {  // if not ready, stall?
-                    p->SC_latch[ii].stall = true;
+            int oldest = INT_MAX, min_idx = 0;
+            int size = ROB_get_size(p->pipe_ROB);
+            // std::cout << size << "\n";
+            // std::cout << p->pipe_ROB->head_ptr << "\n";
+            // std::cout << p->pipe_ROB->tail_ptr << "\n";
+            for(int j = p->pipe_ROB->head_ptr; j != p->pipe_ROB->tail_ptr; j = (j + 1) % size) {
+                // get oldest
+                ROB_Entry curr = p->pipe_ROB->ROB_Entries[j];
+                if(curr.inst.inst_num > oldest) {
+                    if(curr.valid && !curr.exec) {
+                        oldest = curr.inst.inst_num;
+                        min_idx = j;
+                    }
                 }
+            }
+            Inst_Info schedule = p->pipe_ROB->ROB_Entries[min_idx].inst;
+            if (oldest != INT_MAX) {   // found inst to stall
+                ROB_mark_exec(p->pipe_ROB, schedule);
+                p->SC_latch[ii].inst = schedule;
+            } else {
+                p->SC_latch[ii].stall = true;
+                p->SC_latch[ii].valid = false;
             }
         }
     }
@@ -339,27 +374,26 @@ void pipe_cycle_schedule(Pipeline *p) {
     // Find valid + src1ready + src2ready + !exec entries in ROB
     // Mark ROB entry as ready to execute  and transfer instruction to SC_latch
         for(int ii = 0; ii < PIPE_WIDTH; ii++) {
-            Inst_Info inst_list[NUM_ROB_ENTRIES];
-            uint8_t idx = 0;
-            for(int i = p->pipe_ROB->head_ptr; i != p->pipe_ROB->tail_ptr; i++) {
-                ROB_Entry rob_entry = p->pipe_ROB->ROB_Entries[i];
-                Inst_Info inst = rob_entry.inst;
-                if (rob_entry != exec && ROB_check_ready(p->pipe_ROB, inst.dr_tag) {
-                    inst_list[idx++] = inst;
+            int oldest = INT_MAX, min_idx = 0;
+            int size = ROB_get_size(p->pipe_ROB);
+            for(int j = p->pipe_ROB->head_ptr; j != p->pipe_ROB->tail_ptr; j = (j + 1) % size) {
+                // get oldest
+                ROB_Entry curr = p->pipe_ROB->ROB_Entries[j];
+                if(curr.inst.inst_num > oldest) {
+                    if(curr.valid && !curr.exec && curr.inst.src1_ready && curr.inst.src2_ready) {
+                        oldest = curr.inst.inst_num;
+                        min_idx = j;
+                    }
                 }
             }
-            // get oldest instruction in the list
-            int old = 0
-            Inst_Info oldest_inst = inst_list[0];
-            for(int i = 0; i < NUM_ROB_ENTRIES; i++) {
-                if (inst_list[i].isnt_num > old) {
-                    old = inst_list[i].isnt_num;
-                    oldest = inst_list[i];
-                }
+            Inst_Info schedule = p->pipe_ROB->ROB_Entries[min_idx].inst;
+            if (oldest != INT_MAX) {   // found inst to stall
+                ROB_mark_exec(p->pipe_ROB, schedule);
+                p->SC_latch[ii].inst = schedule;
+            } else {
+                p->SC_latch[ii].stall = true;
+                p->SC_latch[ii].valid = false;
             }
-            // schedule it
-            ROB_mark_ready(p->pipe_ROB, oldest_inst);
-            p->SC_latch[ii].inst = oldest_inst;
         }
     }
 }
@@ -375,8 +409,7 @@ void pipe_cycle_writeback(Pipeline *p){
 
     for(int ii = 0; ii < MAX_WRITEBACKS; ii++) {
         Inst_Info inst = p->EX_latch[ii].inst;
-        int dest_tag = RAT_get_remap(p->pipe_RAT, inst.dest_reg)
-        ROB_wakeup(p->pipe_ROB, dest_tag); // wake up src ready bits in instruction
+        ROB_wakeup(p->pipe_ROB, inst.dr_tag); // wake up src ready bits in instruction
         ROB_mark_ready(p->pipe_ROB, inst); // mark ready bit in ROB -> check srcs
     }
 }
@@ -385,32 +418,33 @@ void pipe_cycle_writeback(Pipeline *p){
 //--------------------------------------------------------------------//
 
 void pipe_cycle_commit(Pipeline *p) {
-    int ii = 0;
-
+    // int ii = 0;
     // TODO: check the head of the ROB. If ready commit (update stats)
     // TODO: Deallocate entry from ROB
     // TODO: Update RAT after checking if the mapping is still relevant
     if (ROB_check_head(p->pipe_ROB)) {
-         p->stat_retired_inst++; // update stats
-         // how to halt the pipeline
-    }
-    Inst_Info head = ROB_remove_head(p->pipe_ROB)  // deallocate
-    // Check for remapping ?
-    if (RAT_get_remap(p->pipe_RAT, head.dest_reg) == -1) { // still relevant ? reset ?
-        RAT_reset_entry(p->pipe_RAT, head.dest_reg);
+        Inst_Info head = ROB_remove_head(p->pipe_ROB);
+        if (head.inst_num == p->halt_inst_num) {
+            p->halt = true;
+        }
+        // Before clearing, check if ot maps to commited PRF
+        int check = RAT_get_remap(p->pipe_RAT, head.dest_reg);
+        if (check == head.dr_tag) {
+            RAT_reset_entry(p->pipe_RAT, head.dest_reg);
+        }
     }
 
   // DUMMY CODE (for compiling, and ensuring simulation terminates!)
-    for(ii=0; ii<PIPE_WIDTH; ii++){
-        if(p->FE_latch[ii].valid){
-            if(p->FE_latch[ii].inst.inst_num >= p->halt_inst_num){
-              p->halt=true;
-            } else {
-                p->stat_retired_inst++;
-                p->FE_latch[ii].valid=false;
-            }
-        }
-    }
+    // for(ii=0; ii<PIPE_WIDTH; ii++){
+    //     if(p->FE_latch[ii].valid){
+    //         if(p->FE_latch[ii].inst.inst_num >= p->halt_inst_num){
+    //           p->halt=true;
+    //         } else {
+    //             p->stat_retired_inst++;
+    //             p->FE_latch[ii].valid=false;
+    //         }
+    //     }
+    // }
 }
 
 //--------------------------------------------------------------------//

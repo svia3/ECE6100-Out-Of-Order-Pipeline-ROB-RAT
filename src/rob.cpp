@@ -45,6 +45,7 @@ void ROB_print_state(ROB *t){
 
 bool ROB_check_space(ROB *t){
     // return (t->tail_ptr != t->head_ptr) && t->ROB_Entries[head_ptr]
+    std::cout << "Space" << t->ROB_Entries[t->tail_ptr].valid <<"\n";
     return !(t->ROB_Entries[t->tail_ptr].valid);
     // if the tail is valid -> something in it -> no space
 }
@@ -54,6 +55,7 @@ bool ROB_check_space(ROB *t){
 /////////////////////////////////////////////////////////////
 
 int ROB_insert(ROB *t, Inst_Info inst){
+    printf("HERE");
     int PRF_id = -1;
     if (ROB_check_space(t)) {
         // build the entry --
@@ -72,8 +74,7 @@ int ROB_insert(ROB *t, Inst_Info inst){
 /////////////////////////////////////////////////////////////
 
 void ROB_mark_exec(ROB *t, Inst_Info inst){
-    int PRF_id = inst.dr_tag;
-    t->ROB_Entries[PRF_id].exec = true;
+    t->ROB_Entries[inst.dr_tag].exec = true;
 }
 
 
@@ -82,8 +83,7 @@ void ROB_mark_exec(ROB *t, Inst_Info inst){
 /////////////////////////////////////////////////////////////
 
 void ROB_mark_ready(ROB *t, Inst_Info inst){
-    int PRF_id = inst.dr_tag;
-    t->ROB_Entries[PRF_id].ready = true;    // read to wrtie back and commit ?
+    t->ROB_Entries[inst.dr_tag].ready = true;    // read to wrtie back and commit ?
 }
 
 /////////////////////////////////////////////////////////////
@@ -91,7 +91,7 @@ void ROB_mark_ready(ROB *t, Inst_Info inst){
 /////////////////////////////////////////////////////////////
 
 bool ROB_check_ready(ROB *t, int tag){
-    return t->ROB_Entries[tag].src1_ready && t->ROB_Entries[tag].src2_ready && t->ROB_Entries[tag].valid;
+    return t->ROB_Entries[tag].ready && t->ROB_Entries[tag].valid;
 }
 
 
@@ -114,7 +114,8 @@ void  ROB_wakeup(ROB *t, int tag){
     // }
     // -- CDB broadcast that is waiting for that tag value to be produced --
     // int curr = t.head_ptr;
-    for(int i = t->head_ptr; i != t->tail_ptr; i++) {
+    int size = ROB_get_size(t);
+    for(int i = t->head_ptr; i != t->tail_ptr; i = (i + 1) % size) {
         Inst_Info curr = t->ROB_Entries[i].inst;
         if(tag == curr.src1_tag) {
             curr.src1_ready = true;
@@ -131,15 +132,20 @@ void  ROB_wakeup(ROB *t, int tag){
 /////////////////////////////////////////////////////////////
 
 Inst_Info ROB_remove_head(ROB *t){
-    Inst_Info removed;
-    if(ROB_check_head(t)) {
-        removed = t->ROB_Entries[t->head_ptr].inst;
-        t->ROB_Entries[t->head_ptr].valid = false;  // remove
-        t->ROB_Entries[t->head_ptr].ready = false;
-        t->head_ptr = (t->head_ptr + 1) % NUM_ROB_ENTRIES;  // wrap around
-    }
-    return removed;
+    Inst_Info head = t->ROB_Entries[t->head_ptr].inst;
+    t->ROB_Entries[t->head_ptr].valid = false;  // remove
+    t->ROB_Entries[t->head_ptr].ready = false;
+    t->head_ptr = (t->head_ptr + 1) % NUM_ROB_ENTRIES;  // wrap around
+    return head;
 }
 
 /////////////////////////////////////////////////////////////
+// Get size of ROB for looping iteration count
 /////////////////////////////////////////////////////////////
+int ROB_get_size(ROB *t) {
+    if (t->tail_ptr - t->head_ptr >= 0) {
+        return t->tail_ptr - t->head_ptr;
+    } else {
+        return (NUM_ROB_ENTRIES - t->head_ptr) + (t->tail_ptr);
+    }
+}
