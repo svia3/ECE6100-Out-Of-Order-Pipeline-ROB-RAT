@@ -15,6 +15,7 @@
 extern int32_t PIPE_WIDTH;
 extern int32_t SCHED_POLICY;
 extern int32_t LOAD_EXE_CYCLES;
+extern int32_t NUM_ROB_ENTRIES;
 
 /**********************************************************************
  * Support Function: Read 1 Trace Record From File and populate Fetch Inst
@@ -168,6 +169,7 @@ void pipe_cycle(Pipeline *p)
     pipe_cycle_issue(p);
     pipe_cycle_decode(p);
     pipe_cycle_fetch(p);
+    // pipe_print_state(p);
 
 }
 
@@ -279,11 +281,11 @@ void pipe_cycle_issue(Pipeline *p) {
   // TODO: If src1/src2 is not remapped, set src1ready/src2ready
   // TODO: If src1/src is remapped, set src1tag/src2tag from RAT. Set src1ready/src2ready based on ready bit from ROB entries.
   // TODO: Set dr_tag
-
+    // printf("HEREEm");
     // stalls in full ROB -> oldest entry in ID latch -> issue
     for(int ii=0; ii<PIPE_WIDTH; ii++){
         // find min instruction here before you insert -> save index/instruction
-        int old = INT_MAX, min_idx = ii;
+        int old = UINT_MAX, min_idx = ii;
         // loop for oldest inst_num -> smallest -> change ii to this index
         for(int jj = 0; jj < PIPE_WIDTH; jj++) {
             if(p->ID_latch[jj].inst.inst_num < old && p->ID_latch[jj].valid) {
@@ -299,25 +301,27 @@ void pipe_cycle_issue(Pipeline *p) {
                 p->ID_latch[min_idx].valid = false;
                 p->ID_latch[min_idx].stall = false;
                 // src1 -> is it remapped? if not -> get from RAT
-                int tag1 = RAT_get_remap(p->pipe_RAT, p->pipe_ROB->ROB_Entries[PRF_id].inst.src1_reg);
+                int tag1 = RAT_get_remap(p->pipe_RAT, insert.src1_reg);
                 if(tag1 == -1) {
+                    p->pipe_ROB->ROB_Entries[PRF_id].inst.src1_tag = -1;
                     p->pipe_ROB->ROB_Entries[PRF_id].inst.src1_ready = true;
                 } else { // it is remapped
                     p->pipe_ROB->ROB_Entries[PRF_id].inst.src1_tag = tag1;
                     p->pipe_ROB->ROB_Entries[PRF_id].inst.src1_ready = ROB_check_ready(p->pipe_ROB, tag1);
                 }
                 // src2 -> is it remapped? if not -> get from RAT
-                int tag2 = RAT_get_remap(p->pipe_RAT, p->pipe_ROB->ROB_Entries[PRF_id].inst.src2_reg);
+                int tag2 = RAT_get_remap(p->pipe_RAT, insert.src2_reg);
                 if(tag2 == -1) {
+                    p->pipe_ROB->ROB_Entries[PRF_id].inst.src2_tag = -1;
                     p->pipe_ROB->ROB_Entries[PRF_id].inst.src2_ready = true;
                 } else {
                     p->pipe_ROB->ROB_Entries[PRF_id].inst.src2_tag = tag2;
                     p->pipe_ROB->ROB_Entries[PRF_id].inst.src2_ready = ROB_check_ready(p->pipe_ROB, tag2);
                 }
                 // Set desintation remapping --
-                insert.dr_tag = PRF_id;
+                p->pipe_ROB->ROB_Entries[PRF_id].inst.dr_tag = PRF_id;
                 // for STORES -> dest_reg -1
-                if (insert.dest_reg != -1) {
+                if (p->pipe_ROB->ROB_Entries[PRF_id].inst.dest_reg >= 0) {
                     RAT_set_remap(p->pipe_RAT, insert.dest_reg, PRF_id);
                 }
             } else {
@@ -338,61 +342,55 @@ void pipe_cycle_schedule(Pipeline *p) {
   // every cycle up to PIPEWIDTH instructions scheduled
 
     // TODO: Implement two scheduling policies (SCHED_POLICY: 0 and 1)
-    if(SCHED_POLICY==0){
-    // inorder scheduling
-    // Find all valid entries, if oldest is stalled then stop
-    // Else mark it as ready to execute and send to SC_latch
-        for(int ii = 0; ii < PIPE_WIDTH; ii++) {
-            int oldest = INT_MAX, min_idx = 0;
+    for(int ii = 0; ii < PIPE_WIDTH; ii++) {
+        // inorder scheduling
+        // Find all valid entries, if oldest is stalled then stop
+        // Else mark it as ready to execute and send to SC_latch
+        if(SCHED_POLICY==0) {
+            uint64_t oldest = UINT_MAX;
+            ROB_Entry schedule = p->pipe_ROB->ROB_Entries[p->pipe_ROB->head_ptr];
             int size = ROB_get_size(p->pipe_ROB);
-            // std::cout << size << "\n";
-            // std::cout << p->pipe_ROB->head_ptr << "\n";
-            // std::cout << p->pipe_ROB->tail_ptr << "\n";
-            for(int j = p->pipe_ROB->head_ptr; j != p->pipe_ROB->tail_ptr; j = (j + 1) % size) {
+            for(int j = 0; j < size; j++) {
+                int k = (p->pipe_ROB->head_ptr + j) % NUM_ROB_ENTRIES;
                 // get oldest
-                ROB_Entry curr = p->pipe_ROB->ROB_Entries[j];
-                if(curr.inst.inst_num > oldest) {
-                    if(curr.valid && !curr.exec) {
+                ROB_Entry curr = p->pipe_ROB->ROB_Entries[k];
+                if(curr.valid && !curr.exec) {
+                    if (curr.inst.inst_num < oldest) {
                         oldest = curr.inst.inst_num;
-                        min_idx = j;
+                        schedule = curr;
                     }
                 }
             }
-            Inst_Info schedule = p->pipe_ROB->ROB_Entries[min_idx].inst;
-            if (oldest != INT_MAX) {   // found inst to stall
-                ROB_mark_exec(p->pipe_ROB, schedule);
-                p->SC_latch[ii].inst = schedule;
-            } else {
-                p->SC_latch[ii].stall = true;
-                p->SC_latch[ii].valid = false;
+            if(schedule.valid && !schedule.exec) {
+                if(schedule.inst.src1_ready && schedule.inst.src2_ready) {
+                    ROB_mark_exec(p->pipe_ROB, schedule.inst);
+                    p->SC_latch[ii].inst = schedule.inst;
+                    p->SC_latch[ii].valid = true;
+                    p->SC_latch[ii].stall = false;
+                }
             }
         }
-    }
-
-    if(SCHED_POLICY==1){
-    // out of order scheduling
-    // Find valid + src1ready + src2ready + !exec entries in ROB
-    // Mark ROB entry as ready to execute  and transfer instruction to SC_latch
-        for(int ii = 0; ii < PIPE_WIDTH; ii++) {
-            int oldest = INT_MAX, min_idx = 0;
+        // out of order scheduling
+        // Find valid + src1ready + src2ready + !exec entries in ROB
+        // Mark ROB entry as ready to execute  and transfer instruction to SC_latch
+        if(SCHED_POLICY==1){
+            bool found = false;
+            Inst_Info schedule = p->pipe_ROB->ROB_Entries[p->pipe_ROB->head_ptr].inst; // default head
             int size = ROB_get_size(p->pipe_ROB);
-            for(int j = p->pipe_ROB->head_ptr; j != p->pipe_ROB->tail_ptr; j = (j + 1) % size) {
+            for(int j = 0; j < size && !found; j++) {
+                int k = (p->pipe_ROB->head_ptr + j) % NUM_ROB_ENTRIES;
                 // get oldest
-                ROB_Entry curr = p->pipe_ROB->ROB_Entries[j];
-                if(curr.inst.inst_num > oldest) {
-                    if(curr.valid && !curr.exec && curr.inst.src1_ready && curr.inst.src2_ready) {
-                        oldest = curr.inst.inst_num;
-                        min_idx = j;
-                    }
+                ROB_Entry curr = p->pipe_ROB->ROB_Entries[k];
+                if(curr.valid && !curr.exec && curr.inst.src1_ready && curr.inst.src2_ready) {
+                    schedule = curr.inst;
+                    found = true;
                 }
             }
-            Inst_Info schedule = p->pipe_ROB->ROB_Entries[min_idx].inst;
-            if (oldest != INT_MAX) {   // found inst to stall
+            if (found) {   // found inst to stall
                 ROB_mark_exec(p->pipe_ROB, schedule);
                 p->SC_latch[ii].inst = schedule;
-            } else {
-                p->SC_latch[ii].stall = true;
-                p->SC_latch[ii].valid = false;
+                p->SC_latch[ii].valid = true;
+                p->SC_latch[ii].stall = false;
             }
         }
     }
@@ -409,8 +407,12 @@ void pipe_cycle_writeback(Pipeline *p){
 
     for(int ii = 0; ii < MAX_WRITEBACKS; ii++) {
         Inst_Info inst = p->EX_latch[ii].inst;
-        ROB_wakeup(p->pipe_ROB, inst.dr_tag); // wake up src ready bits in instruction
-        ROB_mark_ready(p->pipe_ROB, inst); // mark ready bit in ROB -> check srcs
+        int tag = p->EX_latch[ii].inst.dr_tag;
+        if (tag >= 0 && p->EX_latch[ii].valid) {
+            ROB_wakeup(p->pipe_ROB, inst.dr_tag); // wake up src ready bits in instruction
+            ROB_mark_ready(p->pipe_ROB, inst); // mark ready bit in ROB -> check srcs
+            p->EX_latch[ii].valid = false;
+        }
     }
 }
 
@@ -422,15 +424,18 @@ void pipe_cycle_commit(Pipeline *p) {
     // TODO: check the head of the ROB. If ready commit (update stats)
     // TODO: Deallocate entry from ROB
     // TODO: Update RAT after checking if the mapping is still relevant
-    if (ROB_check_head(p->pipe_ROB)) {
-        Inst_Info head = ROB_remove_head(p->pipe_ROB);
-        if (head.inst_num == p->halt_inst_num) {
-            p->halt = true;
-        }
-        // Before clearing, check if ot maps to commited PRF
-        int check = RAT_get_remap(p->pipe_RAT, head.dest_reg);
-        if (check == head.dr_tag) {
-            RAT_reset_entry(p->pipe_RAT, head.dest_reg);
+    for(int ii=0; ii<PIPE_WIDTH; ii++){
+        if (ROB_check_head(p->pipe_ROB)) {
+            Inst_Info head = ROB_remove_head(p->pipe_ROB);
+            // Before clearing, check if it maps to commited PRF
+            int check = RAT_get_remap(p->pipe_RAT, head.dest_reg);
+            if (check >= 0 && check == head.dr_tag) {
+                RAT_reset_entry(p->pipe_RAT, head.dest_reg);
+            }
+            if (head.inst_num == p->halt_inst_num) {
+                p->halt = true;
+            }
+            p->stat_retired_inst++;
         }
     }
 

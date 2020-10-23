@@ -40,7 +40,7 @@ void RAT_print_state(RAT *t){
 /////////////////////////////////////////////////////////////
 
 int  RAT_get_remap(RAT *t, int arf_id){
-    if(t->RAT_Entries[arf_id].valid) {
+    if(t->RAT_Entries[arf_id].valid && arf_id >= 0) {
         return t->RAT_Entries[arf_id].prf_id;
     }
     return -1;
